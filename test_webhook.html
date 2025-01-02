@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DreamLabZ Webhook Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { margin: 5px; padding: 10px; cursor: pointer; }
+        .mod-group { margin: 20px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .admin-panel { background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin-top: 20px; }
+        .server-info { display: flex; gap: 10px; margin-bottom: 10px; }
+        .info-item { background: #fff; padding: 5px 10px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h2>DreamLabZ Webhook Test</h2>
+    
+    <div class="server-info">
+        <div class="info-item">Region: EU</div>
+        <div class="info-item">Players: 0</div>
+        <div class="info-item">Uptime: 0h 0m</div>
+        <div class="info-item">Version: 1.0.0</div>
+    </div>
+
+    <div class="mod-group">
+        <h3>Debug Message</h3>
+        <button onclick="sendDebugMessage()">Send Debug Message</button>
+    </div>
+
+    <div class="mod-group">
+        <h3>Kill Streak Tests</h3>
+        <button onclick="sendWhitelistedMessage('DreamLabZ_KillStreak')">Test Kill Streak - Whitelisted</button>
+        <button onclick="sendBlacklistedMessage('DreamLabZ_KillStreak')">Test Kill Streak - Blacklisted</button>
+    </div>
+
+    <div class="mod-group">
+        <h3>Mod Pack Tests</h3>
+        <button onclick="sendWhitelistedMessage('DreamLabZ_ModPack')">Test Mod Pack - Whitelisted</button>
+        <button onclick="sendBlacklistedMessage('DreamLabZ_ModPack')">Test Mod Pack - Blacklisted</button>
+    </div>
+
+    <div class="mod-group">
+        <h3>Operation Monarch Tests</h3>
+        <button onclick="sendWhitelistedMessage('DreamLabZ_Monarch')">Test Operation Monarch - Whitelisted</button>
+        <button onclick="sendBlacklistedMessage('DreamLabZ_Monarch')">Test Operation Monarch - Blacklisted</button>
+    </div>
+
+    <div class="admin-panel">
+        <h3>Administrative Tools</h3>
+        
+        <div>
+            <h4>Admin Authentication</h4>
+            <input type="password" id="adminKey" placeholder="Admin Key" style="margin-bottom: 10px;">
+        </div>
+
+        <div>
+            <h4>Add IP to Whitelist (Admin Only)</h4>
+            <select id="modSelect">
+                <option value="DreamLabZ_KillStreak">Kill Streak</option>
+                <option value="DreamLabZ_ModPack">Mod Pack</option>
+                <option value="DreamLabZ_Monarch">Operation Monarch</option>
+            </select>
+            <input type="text" id="whitelistIP" placeholder="IP Address">
+            <input type="text" id="ownerName" placeholder="Owner Name">
+            <input type="text" id="region" placeholder="Region">
+            <select id="durationType">
+                <option value="permanent">Permanent</option>
+                <option value="temporary">Temporary</option>
+            </select>
+            <input type="number" id="duration" placeholder="Duration (hours)" value="24" style="display: none;">
+            <button onclick="addIPToWhitelist()">Add to Whitelist</button>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <h4>Pending Whitelist Requests</h4>
+            <div id="pendingRequests" style="max-height: 200px; overflow-y: auto; margin: 10px 0;">
+                <!-- Pending requests will be displayed here -->
+            </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <h4>Emergency Override (Admin Only)</h4>
+            <input type="password" id="overrideCode" placeholder="Override Code">
+            <button onclick="activateEmergencyOverride()">Activate Override</button>
+        </div>
+        
+        <div style="margin-top: 10px;">
+            <h4>IP Management (Admin Only)</h4>
+            <input type="text" id="blacklistIP" placeholder="IP Address">
+            <button onclick="addToBlacklist()">Add to Blacklist</button>
+            <button onclick="backupWhitelist()">Backup Whitelist</button>
+        </div>
+    </div>
+
+    <div class="user-panel" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+        <h3>Request Whitelist Access</h3>
+        <select id="requestModSelect">
+            <option value="DreamLabZ_KillStreak">Kill Streak</option>
+            <option value="DreamLabZ_ModPack">Mod Pack</option>
+            <option value="DreamLabZ_Monarch">Operation Monarch</option>
+        </select>
+        <input type="text" id="requestIP" placeholder="Server IP">
+        <input type="text" id="serverName" placeholder="Server Name">
+        <input type="text" id="serverRegion" placeholder="Server Region">
+        <input type="text" id="contactInfo" placeholder="Contact Info (Discord/Email)">
+        <textarea id="requestReason" placeholder="Reason for request" style="width: 100%; margin-top: 10px;"></textarea>
+        <button onclick="submitWhitelistRequest()" style="margin-top: 10px;">Submit Request</button>
+    </div>
+
+    <script>
+        const WEBHOOK_URL = 'https://discord.com/api/webhooks/1324491518269984808/D5HAj8pmX_IUiuCOurPXV4ss8c6fPDfiESbi6a6s1bTbYoPA2-rRbCPxmHm2nMOMAZvE';
+        const ADMIN_KEY = 'DL_ADM_8f4e9d2c5a7b3k6h9j0m1n4p5q8r9t2v';
+        const MOD_URLS = {
+            'DreamLabZ_KillStreak': 'https://steamcommunity.com/sharedfiles/filedetails/?id=3399120045',
+            'DreamLabZ_ModPack': 'https://steamcommunity.com/sharedfiles/filedetails/?id=3391921785',
+            'DreamLabZ_Monarch': 'https://steamcommunity.com/sharedfiles/filedetails/?id=3389748652'
+        };
+        const MOD_COLORS = {
+            'DreamLabZ_KillStreak': 16776960,  // Yellow
+            'DreamLabZ_ModPack': 65280,       // Green
+            'DreamLabZ_Monarch': 16711680     // Red
+        };
+        const LOGO_URL = 'ModIcon.png';
+
+        // Simulated server info
+        let serverInfo = {
+            region: 'EU',
+            version: '1.0.0',
+            players: 0,
+            uptime: 0
+        };
+
+        // Update server info every minute
+        setInterval(() => {
+            serverInfo.uptime += 60;
+            serverInfo.players = Math.floor(Math.random() * 50);
+            updateServerInfoDisplay();
+        }, 60000);
+
+        function updateServerInfoDisplay() {
+            const hours = Math.floor(serverInfo.uptime / 3600);
+            const minutes = Math.floor((serverInfo.uptime % 3600) / 60);
+            document.querySelector('.server-info').innerHTML = `
+                <div class="info-item">Region: ${serverInfo.region}</div>
+                <div class="info-item">Players: ${serverInfo.players}</div>
+                <div class="info-item">Uptime: ${hours}h ${minutes}m</div>
+                <div class="info-item">Version: ${serverInfo.version}</div>
+            `;
+        }
+
+        function sendMessage(payload) {
+            fetch(WEBHOOK_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => alert('Message sent! Status: ' + response.status))
+            .catch(error => alert('Error: ' + error));
+        }
+
+        function sendDebugMessage() {
+            const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Debug',
+                    description: 'System Initialization Test',
+                    color: 16776960,
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'Time',
+                            value: now,
+                            inline: true
+                        },
+                        {
+                            name: 'Server Info',
+                            value: `Region: ${serverInfo.region}\nPlayers: ${serverInfo.players}\nUptime: ${Math.floor(serverInfo.uptime/3600)}h ${Math.floor((serverInfo.uptime%3600)/60)}m`,
+                            inline: true
+                        }
+                    ]
+                }]
+            });
+        }
+
+        function sendWhitelistedMessage(modName) {
+            const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Authentication Alert',
+                    description: '✅ Authorization Verified',
+                    color: MOD_COLORS[modName],
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'Server Name',
+                            value: 'Test Server',
+                            inline: true
+                        },
+                        {
+                            name: 'Status',
+                            value: 'WHITELISTED',
+                            inline: true
+                        },
+                        {
+                            name: 'IP Address',
+                            value: '192.168.1.1',
+                            inline: true
+                        },
+                        {
+                            name: 'Region',
+                            value: serverInfo.region,
+                            inline: true
+                        },
+                        {
+                            name: 'Players',
+                            value: serverInfo.players.toString(),
+                            inline: true
+                        },
+                        {
+                            name: 'Uptime',
+                            value: `${Math.floor(serverInfo.uptime/3600)}h ${Math.floor((serverInfo.uptime%3600)/60)}m`,
+                            inline: true
+                        },
+                        {
+                            name: 'Mod URL',
+                            value: MOD_URLS[modName],
+                            inline: false
+                        }
+                    ]
+                }]
+            });
+        }
+
+        function sendBlacklistedMessage(modName) {
+            const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Authentication Alert',
+                    description: '⚠️ Unauthorized Usage Detected',
+                    color: MOD_COLORS[modName],
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'Server Name',
+                            value: 'Test Server',
+                            inline: true
+                        },
+                        {
+                            name: 'Status',
+                            value: 'BLACKLISTED',
+                            inline: true
+                        },
+                        {
+                            name: 'IP Address',
+                            value: '192.168.1.2',
+                            inline: true
+                        },
+                        {
+                            name: 'Region',
+                            value: serverInfo.region,
+                            inline: true
+                        },
+                        {
+                            name: 'Players',
+                            value: serverInfo.players.toString(),
+                            inline: true
+                        },
+                        {
+                            name: 'Uptime',
+                            value: `${Math.floor(serverInfo.uptime/3600)}h ${Math.floor((serverInfo.uptime%3600)/60)}m`,
+                            inline: true
+                        },
+                        {
+                            name: 'Mod URL',
+                            value: MOD_URLS[modName],
+                            inline: false
+                        },
+                        {
+                            name: 'Message',
+                            value: 'If you are using this mod without authorization, please purchase it from the Steam Workshop.',
+                            inline: false
+                        }
+                    ]
+                }]
+            });
+        }
+
+        function addIPToWhitelist() {
+            if (!isAdmin()) {
+                alert('Invalid admin key');
+                return;
+            }
+
+            const adminKey = document.getElementById('adminKey').value;
+            if (!adminKey) {
+                alert('Please enter admin key');
+                return;
+            }
+
+            const modName = document.getElementById('modSelect').value;
+            const ip = document.getElementById('whitelistIP').value;
+            const owner = document.getElementById('ownerName').value;
+            const region = document.getElementById('region').value;
+            const durationType = document.getElementById('durationType').value;
+            const duration = durationType === 'temporary' ? parseInt(document.getElementById('duration').value) : 0;
+
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Admin Action',
+                    description: '✅ IP Added to Whitelist',
+                    color: MOD_COLORS[modName],
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'Mod',
+                            value: modName.replace('DreamLabZ_', ''),
+                            inline: true
+                        },
+                        {
+                            name: 'IP Address',
+                            value: ip,
+                            inline: true
+                        },
+                        {
+                            name: 'Owner',
+                            value: owner || 'Not specified',
+                            inline: true
+                        },
+                        {
+                            name: 'Region',
+                            value: region || 'Not specified',
+                            inline: true
+                        },
+                        {
+                            name: 'Duration',
+                            value: durationType === 'permanent' ? 'Permanent' : `${duration} hours`,
+                            inline: true
+                        }
+                    ]
+                }]
+            });
+        }
+
+        function viewWhitelist() {
+            const modName = document.getElementById('viewModSelect').value;
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Whitelist',
+                    description: `Current whitelist for ${modName.replace('DreamLabZ_', '')}`,
+                    color: MOD_COLORS[modName],
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'Mod URL',
+                            value: MOD_URLS[modName],
+                            inline: false
+                        },
+                        {
+                            name: 'Time',
+                            value: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                            inline: true
+                        }
+                    ]
+                }]
+            });
+        }
+
+        function activateEmergencyOverride() {
+            if (!isAdmin()) {
+                alert('Invalid admin key');
+                return;
+            }
+
+            const code = document.getElementById('overrideCode').value;
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Emergency Override',
+                    description: '⚠️ Emergency Override Activated',
+                    color: 16711680,
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'Action',
+                            value: 'Authentication checks temporarily disabled',
+                            inline: false
+                        },
+                        {
+                            name: 'Time',
+                            value: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                            inline: true
+                        }
+                    ]
+                }]
+            });
+        }
+
+        function addToBlacklist() {
+            if (!isAdmin()) {
+                alert('Invalid admin key');
+                return;
+            }
+
+            const ip = document.getElementById('blacklistIP').value;
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Admin Action',
+                    description: '🚫 IP Added to Blacklist',
+                    color: 16711680,
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'IP Address',
+                            value: ip,
+                            inline: true
+                        },
+                        {
+                            name: 'Time',
+                            value: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                            inline: true
+                        }
+                    ]
+                }]
+            });
+        }
+
+        function backupWhitelist() {
+            if (!isAdmin()) {
+                alert('Invalid admin key');
+                return;
+            }
+
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Admin Action',
+                    description: '💾 Whitelist Backup Created',
+                    color: 65280,
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'Action',
+                            value: 'IP whitelist backup completed',
+                            inline: true
+                        },
+                        {
+                            name: 'Time',
+                            value: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                            inline: true
+                        }
+                    ]
+                }]
+            });
+        }
+
+        function submitWhitelistRequest() {
+            const modName = document.getElementById('requestModSelect').value;
+            const ip = document.getElementById('requestIP').value;
+            const serverName = document.getElementById('serverName').value;
+            const region = document.getElementById('serverRegion').value;
+            const contactInfo = document.getElementById('contactInfo').value;
+            const reason = document.getElementById('requestReason').value;
+
+            if (!ip || !serverName || !region || !contactInfo || !reason) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            sendMessage({
+                embeds: [{
+                    title: 'DreamLabZ Whitelist Request',
+                    description: 'New whitelist request submitted',
+                    color: MOD_COLORS[modName],
+                    thumbnail: {
+                        url: LOGO_URL
+                    },
+                    fields: [
+                        {
+                            name: 'Mod',
+                            value: modName.replace('DreamLabZ_', ''),
+                            inline: true
+                        },
+                        {
+                            name: 'IP Address',
+                            value: ip,
+                            inline: true
+                        },
+                        {
+                            name: 'Server Name',
+                            value: serverName,
+                            inline: true
+                        },
+                        {
+                            name: 'Region',
+                            value: region,
+                            inline: true
+                        },
+                        {
+                            name: 'Contact Info',
+                            value: contactInfo,
+                            inline: true
+                        },
+                        {
+                            name: 'Reason',
+                            value: reason,
+                            inline: false
+                        }
+                    ]
+                }]
+            });
+
+            // Clear form
+            document.getElementById('requestIP').value = '';
+            document.getElementById('serverName').value = '';
+            document.getElementById('serverRegion').value = '';
+            document.getElementById('contactInfo').value = '';
+            document.getElementById('requestReason').value = '';
+            
+            alert('Request submitted successfully!');
+        }
+
+        function isAdmin() {
+            const inputKey = document.getElementById('adminKey').value;
+            return inputKey === ADMIN_KEY;
+        }
+
+        // Auto-fill admin key on page load
+        window.onload = function() {
+            document.getElementById('adminKey').value = ADMIN_KEY;
+            // Save to local storage
+            localStorage.setItem('adminKey', ADMIN_KEY);
+        };
+
+        // Show/hide duration input based on selection
+        document.getElementById('durationType').addEventListener('change', function() {
+            document.getElementById('duration').style.display = 
+                this.value === 'temporary' ? 'inline-block' : 'none';
+        });
+
+        // Initialize server info display
+        updateServerInfoDisplay();
+    </script>
+</body>
+</html>
